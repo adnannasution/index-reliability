@@ -71,9 +71,19 @@ function Dropzone() {
           dari kolom <code>TotalPlnndCosts</code>. Keduanya boleh diunggah sekaligus.
         </p>
       </div>
-      <button className="btn btn-utama" onClick={() => inputRef.current?.click()} disabled={uploading}>
-        Pilih berkas…
-      </button>
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <button className="btn btn-utama" onClick={() => inputRef.current?.click()} disabled={uploading}>
+          Pilih berkas…
+        </button>
+        <a
+          href="/api/export/template"
+          download="Template_SAP_CDU.xlsx"
+          className="btn btn-garis inline-flex items-center gap-1.5"
+        >
+          <Icon name="unduh" size={15} />
+          Unduh template
+        </a>
+      </div>
     </div>
   )
 }
