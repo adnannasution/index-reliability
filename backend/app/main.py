@@ -174,7 +174,8 @@ async def health() -> Dict[str, Any]:
 # Bila `frontend/dist` sudah dibangun, seluruh permintaan non-/api dilayani
 # dari sana. Rute "/" mengembalikan index.html dan setiap rute SPA lain juga
 # dipetakan ke index.html supaya routing sisi klien berjalan.
-_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+_dist_env = os.getenv("FRONTEND_DIST_DIR")
+_DIST = Path(_dist_env) if _dist_env else Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 if _DIST.is_dir() and (_DIST / "index.html").is_file():
     app.mount("/assets", StaticFiles(directory=_DIST / "assets"), name="assets")
