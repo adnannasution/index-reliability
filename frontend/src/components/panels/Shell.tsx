@@ -174,8 +174,8 @@ export function Sidebar({
         <div className="flex items-center gap-2.5 border-b border-white/10 px-4 py-4">
           <Lambang />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold leading-tight">Keandalan CDU</p>
-            <p className="truncate text-2xs text-white/60">Pertamina RU VI Balongan</p>
+            <p className="truncate text-sm font-bold leading-tight">Keandalan Kilang</p>
+            <p className="truncate text-2xs text-white/60">Pertamina Patra Niaga</p>
           </div>
           {/* Tombol tutup hanya muncul di layar kecil. */}
           <button
