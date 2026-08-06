@@ -12,6 +12,7 @@ from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 
+from app import db
 from app.config.defaults import DEFAULT_CONFIG
 from app.core import store
 from app.core.data_loader import (
@@ -109,6 +110,16 @@ async def upload(file: UploadFile = File(...)) -> dict:
 
     store.put(ds)
 
+    # Simpan ke PostgreSQL agar dataset tetap ada setelah redeploy.
+    db.save_file(
+        dataset_id=ds.dataset_id,
+        kind=ds.kind,
+        filename=name,
+        sheet_name=ds.sheet_name,
+        uploaded_at=ds.uploaded_at,
+        raw_bytes=raw,
+    )
+
     payload = {
         "dataset_id": ds.dataset_id,
         "kind": ds.kind,
@@ -176,4 +187,5 @@ async def preview(dataset_id: str, limit: int = 25) -> dict:
 async def delete_dataset(dataset_id: str) -> dict:
     if not store.drop(dataset_id):
         raise HTTPException(status_code=404, detail="Dataset tidak ditemukan.")
+    db.delete_file(dataset_id)
     return {"ok": True, "dataset_id": dataset_id}
