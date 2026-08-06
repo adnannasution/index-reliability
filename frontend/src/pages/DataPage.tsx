@@ -197,7 +197,7 @@ export function DataPage() {
             </div>
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,22rem)_1fr]">
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,30rem)_1fr]">
             <Card title="Modul A: Kualitas data & rekap" subtitle="ISO 14224:2016 (periode surveilans)">
               <table className="tabel">
                 <tbody>
