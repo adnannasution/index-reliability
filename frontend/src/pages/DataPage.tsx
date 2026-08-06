@@ -198,36 +198,34 @@ export function DataPage() {
           </div>
 
           <Card title="Modul A: Kualitas data & rekap" subtitle="ISO 14224:2016 (periode surveilans)">
-            <div className="flex flex-col gap-5 sm:flex-row sm:gap-8">
-              <table className="tabel shrink-0">
-                <tbody>
-                  {analysis.data_quality.map((r) => (
-                    <tr key={r.metrik}>
-                      <td className="text-slate-600">{r.metrik}</td>
-                      <td className="num font-semibold text-biru-800">{int(r.nilai)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="min-w-0 flex-1 space-y-2 self-start">
-                <Callout tone="note">
-                  Jendela pengamatan dihitung sebagai{' '}
-                  <span className="font-mono">T_obs = tanggal_akhir − tanggal_awal</span> mengikuti ISO 14224
-                  (periode surveilans, bukan jarak antar-kejadian). Mode{' '}
-                  <strong>{analysis.meta.window_end}</strong> memakai{' '}
-                  {analysis.meta.window_end === 'cutoff'
-                    ? 'tanggal terakhir di seluruh berkas (tanggal ekspor SAP)'
-                    : 'notifikasi unit terakhir'}
-                  .
+            <table className="tabel" style={{ width: 'auto' }}>
+              <tbody>
+                {analysis.data_quality.map((r) => (
+                  <tr key={r.metrik}>
+                    <td className="text-slate-600">{r.metrik}</td>
+                    <td className="num font-semibold text-biru-800">{int(r.nilai)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="mt-4 space-y-2">
+              <Callout tone="note">
+                Jendela pengamatan dihitung sebagai{' '}
+                <span className="font-mono">T_obs = tanggal_akhir − tanggal_awal</span> mengikuti ISO 14224
+                (periode surveilans, bukan jarak antar-kejadian). Mode{' '}
+                <strong>{analysis.meta.window_end}</strong> memakai{' '}
+                {analysis.meta.window_end === 'cutoff'
+                  ? 'tanggal terakhir di seluruh berkas (tanggal ekspor SAP)'
+                  : 'notifikasi unit terakhir'}
+                .
+              </Callout>
+              {analysis.meta.n_unmapped > 0 && (
+                <Callout tone="warning" title={`${analysis.meta.n_unmapped} tag tanpa mapping FS`}>
+                  Tag berikut tidak ada pada mapping Functional System sehingga diperlakukan sebagai OTHER:{' '}
+                  {analysis.meta.unmapped_tags.slice(0, 10).join(', ')}
+                  {analysis.meta.unmapped_tags.length > 10 ? ', …' : ''}. Analisis tetap berjalan.
                 </Callout>
-                {analysis.meta.n_unmapped > 0 && (
-                  <Callout tone="warning" title={`${analysis.meta.n_unmapped} tag tanpa mapping FS`}>
-                    Tag berikut tidak ada pada mapping Functional System sehingga diperlakukan sebagai OTHER:{' '}
-                    {analysis.meta.unmapped_tags.slice(0, 10).join(', ')}
-                    {analysis.meta.unmapped_tags.length > 10 ? ', …' : ''}. Analisis tetap berjalan.
-                  </Callout>
-                )}
-              </div>
+              )}
             </div>
           </Card>
 
