@@ -233,7 +233,16 @@ export const useStore = create<State>((set, get) => ({
     try {
       const r = await api.upload(file)
       if (r.kind === 'notification') {
-        set({ notif: r, ...derivedReset, selected: [], focusTag: undefined })
+        // Sync config.unit dengan prefix yang terdeteksi otomatis saat upload
+        // agar analisis langsung pakai prefix yang sesuai berkas.
+        const detectedUnit = r.summary.unit_prefix
+        set((s) => ({
+          notif: r,
+          ...derivedReset,
+          selected: [],
+          focusTag: undefined,
+          config: { ...s.config, unit: detectedUnit },
+        }))
         get().pushToast({
           tone: 'success',
           title: 'Berkas notifikasi dimuat',
