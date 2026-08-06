@@ -89,6 +89,7 @@ interface State {
   dismissToast: (id: number) => void
   handleError: (e: unknown, fallbackTitle?: string) => void
 
+  restoreDatasets: () => Promise<void>
   loadDefaults: () => Promise<void>
   loadReferences: () => Promise<void>
   uploadFile: (file: File) => Promise<void>
@@ -210,6 +211,29 @@ export const useStore = create<State>((set, get) => ({
     const message = err?.message ?? String(e)
     const hint = err?.hint ? ` ${err.hint}` : ''
     get().pushToast({ tone: 'error', title: fallbackTitle, message: message + hint })
+  },
+
+  restoreDatasets: async () => {
+    // Jangan timpa dataset yang sudah ada di store (mis. baru saja di-upload).
+    if (get().notif || get().order) return
+    try {
+      const list = await api.datasets()
+      if (!list.length) return
+      for (const ds of list) {
+        if (ds.kind === 'notification' && !get().notif) {
+          const detectedUnit = ds.summary?.unit_prefix
+          set((s) => ({
+            notif: ds,
+            config: detectedUnit ? { ...s.config, unit: detectedUnit } : s.config,
+          }))
+        } else if (ds.kind === 'order' && !get().order) {
+          set({ order: ds })
+        }
+      }
+      if (get().notif) await get().runAnalysis(true)
+    } catch {
+      // Diam jika server kosong atau tidak terjangkau — tidak ganggu startup.
+    }
   },
 
   loadDefaults: async () => {

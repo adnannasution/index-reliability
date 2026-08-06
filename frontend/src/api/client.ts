@@ -176,7 +176,7 @@ export const api = {
   defaults: () => request<any>('/meta/defaults'),
   references: () => request<any>('/meta/references'),
   domain: () => request<any>('/meta/domain'),
-  datasets: () => request<any[]>('/datasets'),
+  datasets: () => request<UploadResult[]>('/datasets'),
 
   upload: async (file: File): Promise<UploadResult> => {
     const fd = new FormData()

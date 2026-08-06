@@ -94,6 +94,12 @@ def list_all() -> list:
         ]
 
 
+def get_all() -> list:
+    """Kembalikan semua Dataset (objek, bukan dict), terurut dari terbaru."""
+    with _LOCK:
+        return list(sorted(_DATASETS.values(), key=lambda x: x.uploaded_at, reverse=True))
+
+
 def drop(dataset_id: str) -> bool:
     with _LOCK:
         return _DATASETS.pop(dataset_id, None) is not None

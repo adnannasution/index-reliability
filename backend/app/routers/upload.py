@@ -31,6 +31,47 @@ router = APIRouter(prefix="/api", tags=["upload"])
 MAX_UPLOAD_BYTES = 80 * 1024 * 1024
 
 
+def _build_payload(ds: store.Dataset) -> dict:
+    """Susun dict respons lengkap (kompatibel dengan UploadResult di frontend)."""
+    payload: dict = {
+        "dataset_id": ds.dataset_id,
+        "kind": ds.kind,
+        "filename": ds.filename,
+        "sheet_name": ds.sheet_name,
+        "uploaded_at": ds.uploaded_at,
+        "columns": ds.columns,
+        "sheets": ds.sheets,
+        "preview": ds.preview,
+    }
+    if ds.notification is not None:
+        nd = ds.notification
+        payload["summary"] = {
+            "rows_in_file": nd.n_rows_file,
+            "rows_unit": len(nd.df),
+            "unit_prefix": nd.unit_prefix,
+            "t_start": nd.t_start.strftime("%Y-%m-%d"),
+            "t_end": nd.t_end.strftime("%Y-%m-%d"),
+            "t_obs_hours": nd.t_obs_hours,
+            "t_obs_days": nd.t_obs_hours / 24.0,
+            "n_dropped_dates": nd.n_dropped_dates,
+            "n_tags": int(nd.df["tag"].nunique()),
+            "n_fail": int(nd.df["is_fail"].sum()),
+            "window_end": nd.window_end_mode,
+        }
+    else:
+        od = ds.order
+        assert od is not None
+        payload["summary"] = {
+            "rows_in_file": od.n_rows_file,
+            "rows_unit": len(od.df),
+            "unit_prefix": od.unit_prefix,
+            "n_tags": int(od.df["tag"].nunique()) if len(od.df) else 0,
+            "planned_cost_total": float(od.df["planned_cost"].sum()) if len(od.df) else 0.0,
+            "actual_cost_total": float(od.df["actual_cost"].sum()) if len(od.df) else 0.0,
+        }
+    return payload
+
+
 def _load_sync(raw: bytes, filename: str) -> store.Dataset:
     """Pekerjaan berat pembacaan Excel: dijalankan di threadpool."""
     sheets = read_all_sheets(io.BytesIO(raw))
@@ -120,49 +161,14 @@ async def upload(file: UploadFile = File(...)) -> dict:
         raw_bytes=raw,
     )
 
-    payload = {
-        "dataset_id": ds.dataset_id,
-        "kind": ds.kind,
-        "filename": ds.filename,
-        "sheet_name": ds.sheet_name,
-        "uploaded_at": ds.uploaded_at,
-        "columns": ds.columns,
-        "sheets": ds.sheets,
-        "preview": ds.preview,
-    }
-    if ds.notification is not None:
-        nd = ds.notification
-        payload["summary"] = {
-            "rows_in_file": nd.n_rows_file,
-            "rows_unit": len(nd.df),
-            "unit_prefix": nd.unit_prefix,
-            "t_start": nd.t_start.strftime("%Y-%m-%d"),
-            "t_end": nd.t_end.strftime("%Y-%m-%d"),
-            "t_obs_hours": nd.t_obs_hours,
-            "t_obs_days": nd.t_obs_hours / 24.0,
-            "n_dropped_dates": nd.n_dropped_dates,
-            "n_tags": int(nd.df["tag"].nunique()),
-            "n_fail": int(nd.df["is_fail"].sum()),
-            "window_end": nd.window_end_mode,
-        }
-    else:
-        od = ds.order
-        assert od is not None
-        payload["summary"] = {
-            "rows_in_file": od.n_rows_file,
-            "rows_unit": len(od.df),
-            "unit_prefix": od.unit_prefix,
-            "n_tags": int(od.df["tag"].nunique()) if len(od.df) else 0,
-            "planned_cost_total": float(od.df["planned_cost"].sum()) if len(od.df) else 0.0,
-            "actual_cost_total": float(od.df["actual_cost"].sum()) if len(od.df) else 0.0,
-        }
-    return store.json_safe(payload)
+    return store.json_safe(_build_payload(ds))
 
 
 @router.get("/datasets")
 async def datasets() -> List[dict]:
-    """Daftar berkas yang sudah di-upload pada sesi ini."""
-    return store.json_safe(store.list_all())
+    """Daftar berkas yang sudah di-upload, dengan payload lengkap agar frontend
+    dapat memulihkan state tanpa upload ulang setelah refresh halaman."""
+    return store.json_safe([_build_payload(ds) for ds in store.get_all()])
 
 
 @router.get("/datasets/{dataset_id}/preview")
