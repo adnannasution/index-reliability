@@ -259,7 +259,11 @@ def load_notifications(
 
     mask_unit = floc.fillna("").str.startswith(unit_prefix)
     if not mask_unit.any():
-        found = sorted({str(v)[:3] for v in floc.dropna().unique()[:400] if str(v)[:1].isdigit()})
+        found = sorted({
+            m.group(0)
+            for v in floc.dropna().unique()[:400]
+            if (m := re.match(r'^\d+-', str(v)))
+        })
         raise DataLoadError(
             f"Tidak ada baris dengan Functional Loc. berawalan '{unit_prefix}'. "
             f"Prefix unit yang terlihat pada berkas: {', '.join(found[:15]) or '(tidak terbaca)'}. "
