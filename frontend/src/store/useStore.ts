@@ -69,6 +69,7 @@ interface State {
   rTarget: number
   optimum?: any
   optimumLoading: boolean
+  optimumError: boolean
 
   references?: any
 
@@ -193,6 +194,7 @@ export const useStore = create<State>((set, get) => ({
   sasaran: { scope: 'fs', fs: 1 },
   rTarget: 0.9,
   optimumLoading: false,
+  optimumError: false,
 
   pushToast: (t) => {
     const id = toastSeq++
@@ -432,8 +434,8 @@ export const useStore = create<State>((set, get) => ({
   setLingkup: (l) => set({ lingkup: l, opt: undefined }),
   setLingkupFs: (fs) => set({ lingkupFs: fs, opt: undefined }),
   setLingkupTags: (tags) => set({ lingkupTags: tags, opt: undefined }),
-  setSasaran: (s) => set({ sasaran: s, optimum: undefined }),
-  setRTarget: (r) => set({ rTarget: r, optimum: undefined }),
+  setSasaran: (s) => set({ sasaran: s, optimum: undefined, optimumError: false }),
+  setRTarget: (r) => set({ rTarget: r, optimum: undefined, optimumError: false }),
 
   loadOptimum: async (force = false) => {
     const { notif, order, config, sasaran, rTarget, optimum, optimumLoading } = get()
@@ -441,12 +443,13 @@ export const useStore = create<State>((set, get) => ({
     if (optimum && !force) return
     if (optimumLoading) return
     if (sasaran.scope === 'equipment' && !sasaran.tag) return
-    set({ optimumLoading: true })
+    set({ optimumLoading: true, optimumError: false })
     try {
       const o = await api.intervalOptimum(notif.dataset_id, sasaran, order?.dataset_id, config, rTarget)
       set({ optimum: o })
     } catch (e) {
       get().handleError(e, 'Analisis titik optimal gagal')
+      set({ optimumError: true })
     } finally {
       set({ optimumLoading: false })
     }

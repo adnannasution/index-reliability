@@ -118,14 +118,15 @@ function BagianOptimum() {
   const setRTarget = useStore((s) => s.setRTarget)
   const optimum = useStore((s) => s.optimum)
   const memuat = useStore((s) => s.optimumLoading)
+  const optimumError = useStore((s) => s.optimumError)
   const muat = useStore((s) => s.loadOptimum)
   const a = useStore((s) => s.analysis)!
 
   const kandidat = (a.equipment ?? []).filter((r: any) => r.n_cm > 0)
 
   useEffect(() => {
-    if (!optimum && !memuat) void muat()
-  }, [optimum, memuat, muat])
+    if (!optimum && !memuat && !optimumError) void muat()
+  }, [optimum, memuat, optimumError, muat])
 
   return (
     <div className="space-y-5">
