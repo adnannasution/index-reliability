@@ -404,6 +404,37 @@ def load_orders(
 
 
 # --------------------------------------------------------------------------
+# Deteksi prefix unit otomatis
+# --------------------------------------------------------------------------
+def detect_unit_prefix(
+    sheets: Dict[str, pd.DataFrame], sheet_name: str
+) -> Optional[str]:
+    """Deteksi prefix unit paling umum dari kolom Functional Loc.
+
+    Dipakai saat upload untuk otomatis memilih prefix yang sesuai berkas,
+    tanpa perlu pengguna mengubah setting secara manual.
+    Mengembalikan None jika tidak ada nilai numeric-prefix yang ditemukan.
+    """
+    from collections import Counter
+
+    raw = sheets.get(sheet_name)
+    if raw is None:
+        return None
+    floc_col = find_column(raw, "Functional Loc.")
+    if floc_col is None:
+        return None
+    floc = raw[floc_col].astype("string").str.strip()
+    counts: Counter[str] = Counter(
+        m.group(0)
+        for v in floc.dropna()
+        if (m := re.match(r"^\d+-", str(v)))
+    )
+    if not counts:
+        return None
+    return counts.most_common(1)[0][0]
+
+
+# --------------------------------------------------------------------------
 # Pratinjau untuk UI
 # --------------------------------------------------------------------------
 def preview_rows(df: pd.DataFrame, limit: int = 25) -> List[Dict[str, object]]:

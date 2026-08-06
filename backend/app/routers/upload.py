@@ -17,6 +17,7 @@ from app.core import store
 from app.core.data_loader import (
     DataLoadError,
     detect_kind,
+    detect_unit_prefix,
     load_notifications,
     load_orders,
     preview_rows,
@@ -45,17 +46,20 @@ def _load_sync(raw: bytes, filename: str) -> store.Dataset:
         raw_sheets=sheets,
     )
 
+    # Pakai prefix dari setting, atau auto-detect dari berkas bila tidak cocok.
+    unit_prefix = detect_unit_prefix(sheets, pick.sheet_name) or DEFAULT_CONFIG.unit
+
     if pick.kind == "notification":
         nd = load_notifications(
             sheets, pick.sheet_name,
-            unit_prefix=DEFAULT_CONFIG.unit,
+            unit_prefix=unit_prefix,
             fail_types=DEFAULT_CONFIG.fail_types,
             window_end=DEFAULT_CONFIG.window_end,
         )
         ds.notification = nd
         ds.preview = preview_rows(nd.df, 25)
     else:
-        od = load_orders(sheets, pick.sheet_name, unit_prefix=DEFAULT_CONFIG.unit)
+        od = load_orders(sheets, pick.sheet_name, unit_prefix=unit_prefix)
         ds.order = od
         ds.preview = preview_rows(od.df, 25)
     return ds
