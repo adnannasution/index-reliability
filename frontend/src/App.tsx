@@ -23,10 +23,12 @@ export default function App() {
   )
   const analysis = useStore((s) => s.analysis)
   const loadDefaults = useStore((s) => s.loadDefaults)
+  const restoreDatasets = useStore((s) => s.restoreDatasets)
 
   useEffect(() => {
     void loadDefaults()
-  }, [loadDefaults])
+    void restoreDatasets()
+  }, [loadDefaults, restoreDatasets])
 
   // Kembali ke halaman Data bila hasil analisis dibuang (mis. berkas dihapus).
   useEffect(() => {
