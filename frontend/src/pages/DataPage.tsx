@@ -197,9 +197,9 @@ export function DataPage() {
             </div>
           </div>
 
-          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,30rem)_1fr]">
-            <Card title="Modul A: Kualitas data & rekap" subtitle="ISO 14224:2016 (periode surveilans)">
-              <table className="tabel">
+          <Card title="Modul A: Kualitas data & rekap" subtitle="ISO 14224:2016 (periode surveilans)">
+            <div className="flex flex-col gap-5 sm:flex-row sm:gap-8">
+              <table className="tabel shrink-0">
                 <tbody>
                   {analysis.data_quality.map((r) => (
                     <tr key={r.metrik}>
@@ -209,7 +209,7 @@ export function DataPage() {
                   ))}
                 </tbody>
               </table>
-              <div className="mt-3 space-y-2">
+              <div className="min-w-0 flex-1 space-y-2 self-start">
                 <Callout tone="note">
                   Jendela pengamatan dihitung sebagai{' '}
                   <span className="font-mono">T_obs = tanggal_akhir − tanggal_awal</span> mengikuti ISO 14224
@@ -228,15 +228,15 @@ export function DataPage() {
                   </Callout>
                 )}
               </div>
-            </Card>
+            </div>
+          </Card>
 
-            <Card
-              title="Pratinjau data ternormalisasi"
-              subtitle={`25 baris pertama unit ${analysis.meta.unit_prefix} setelah pembersihan tanggal dan pengurutan`}
-            >
-              {notif && <DataTable columns={previewCols} rows={notif.preview} maxHeight="26rem" searchable />}
-            </Card>
-          </div>
+          <Card
+            title="Pratinjau data ternormalisasi"
+            subtitle={`25 baris pertama unit ${analysis.meta.unit_prefix} setelah pembersihan tanggal dan pengurutan`}
+          >
+            {notif && <DataTable columns={previewCols} rows={notif.preview} maxHeight="26rem" searchable />}
+          </Card>
         </>
       )}
     </div>
