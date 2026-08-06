@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict
 
@@ -28,6 +29,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.data_loader import DataLoadError
@@ -47,7 +49,41 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s | %(message)s"
 )
 
+
+async def _reload_datasets_from_db() -> None:
+    """Muat ulang semua berkas tersimpan di DB ke in-memory store saat startup."""
+    from app import db
+    from app.core import store
+    from app.routers.upload import _load_sync
+
+    rows = db.load_all()
+    if not rows:
+        return
+    logger.info("Memuat ulang %d dataset dari PostgreSQL…", len(rows))
+    for row in rows:
+        try:
+            ds = await run_in_threadpool(_load_sync, row["raw_bytes"], row["filename"])
+            # Gunakan dataset_id dan waktu upload asli dari DB
+            ds.dataset_id = row["dataset_id"]
+            ds.uploaded_at = row["uploaded_at"]
+            store.put(ds)
+            logger.info("  ✓ %s (%s)", row["filename"], row["dataset_id"])
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("  ✗ Gagal memuat %s: %s", row["filename"], exc)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # ---------- startup ----------
+    from app import db
+    await run_in_threadpool(db.init)
+    await _reload_datasets_from_db()
+    yield
+    # ---------- shutdown ---------- (tidak ada yang perlu dibersihkan)
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Reliability & Maintenance Optimization Dashboard: CDU RU VI Balongan",
     description=(
         "Analisis keandalan dan optimasi pemeliharaan Crude Distillation Unit "
