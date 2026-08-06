@@ -198,11 +198,11 @@ export function DataPage() {
           </div>
 
           <Card title="Modul A: Kualitas data & rekap" subtitle="ISO 14224:2016 (periode surveilans)">
-            <table className="tabel" style={{ width: 'auto' }}>
+            <table className="tabel">
               <tbody>
                 {analysis.data_quality.map((r) => (
                   <tr key={r.metrik}>
-                    <td className="text-slate-600">{r.metrik}</td>
+                    <td className="w-full text-slate-600">{r.metrik}</td>
                     <td className="num font-semibold text-biru-800">{int(r.nilai)}</td>
                   </tr>
                 ))}
