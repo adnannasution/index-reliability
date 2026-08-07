@@ -126,7 +126,7 @@ def run_analysis(nd: NotificationData, cfg: Config) -> AnalysisResult:
 
     kelas = {t: tag_type(t, unit) for t in tags}
     mdt = {t: mdt_of(t) for t in tags}
-    fs_tag_raw = {t: fs_of(t) for t in tags}
+    fs_tag_raw = {t: fs_of(t, unit) for t in tags}
     fs_tag = {t: (v if v >= 0 else 0) for t, v in fs_tag_raw.items()}
     # Kritikalitas = nilai pada notifikasi PERTAMA tag tsb (df sudah urut tanggal).
     crit: Dict[str, str] = {}
@@ -137,6 +137,10 @@ def run_analysis(nd: NotificationData, cfg: Config) -> AnalysisResult:
     res.n_cm, res.n_pm, res.kelas, res.crit, res.mdt = n_cm, n_pm, kelas, crit, mdt
     res.fs_of_tag = fs_tag
 
+    # Tag tidak ada di FS_MAP → FS di-assign otomatis dari jenis peralatan.
+    auto_mapped_tags = [t for t in tags if FS_MAP.get(t.strip()) is None]
+    n_auto_mapped = len(auto_mapped_tags)
+    # Tetap tracking v < 0 untuk backward-compat, tapi setelah fallback selalu 0.
     n_unmapped = sum(1 for v in fs_tag_raw.values() if v < 0)
     total_cm = int(sum(n_cm.values()))
 
@@ -146,7 +150,7 @@ def run_analysis(nd: NotificationData, cfg: Config) -> AnalysisResult:
         {"metrik": "Kegagalan korektif M2", "nilai": int((df["type"] == "M2").sum())},
         {"metrik": f"Preventif {cfg.pm_type}", "nilai": int((df["type"] == cfg.pm_type).sum())},
         {"metrik": "Jumlah tag unik", "nilai": len(tags)},
-        {"metrik": "Tag tanpa mapping FS", "nilai": n_unmapped},
+        {"metrik": "Tag dengan auto-mapping FS", "nilai": n_auto_mapped},
         {"metrik": "Tanggal kosong (dibuang)", "nilai": nd.n_dropped_dates},
         {"metrik": "Jendela pengamatan (hari)", "nilai": int(round((nd.t_end - nd.t_start).days))},
         {"metrik": "Jendela pengamatan (jam)", "nilai": int(round(t_obs))},
@@ -164,8 +168,9 @@ def run_analysis(nd: NotificationData, cfg: Config) -> AnalysisResult:
         "window_end": nd.window_end_mode,
         "n_tags": len(tags),
         "n_unmapped": n_unmapped,
+        "n_auto_mapped": n_auto_mapped,
         "total_cm": total_cm,
-        "unmapped_tags": [t for t, v in fs_tag_raw.items() if v < 0],
+        "unmapped_tags": auto_mapped_tags,
     }
 
     # ---------------- B. Keandalan per equipment ----------------

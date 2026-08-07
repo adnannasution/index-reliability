@@ -190,6 +190,8 @@ def tag_type(tag: str, unit_prefix: str = "11-") -> str:
     if not sep or not head:
         # Tidak ada '-' kedua -> extractBetween MATLAB mengembalikan kosong.
         return "other"
+    # MATLAB: switch upper(p(1)) — hanya huruf PERTAMA yang dipakai.
+    # Multi-char seperti 'EA' (air cooler) → 'E' → exchanger, sesuai MATLAB.
     return {
         "F": "heater",
         "V": "vessel",
@@ -197,13 +199,34 @@ def tag_type(tag: str, unit_prefix: str = "11-") -> str:
         "P": "pump",
         "C": "column",
         "A": "injection",
-    }.get(head.upper(), "other")
+    }.get(head[0].upper() if head else "", "other")
 
 
-def fs_of(tag: str) -> int:
-    """FS suatu tag: 1/2/3, 0 = OTHER, -1 = tidak ada di mapping (port `fsOf`)."""
+_AUTO_FS_BY_TYPE: Dict[str, int] = {
+    "heater": 2,      # F → FS-2 (tungku pemanas di jalur panas)
+    "column": 2,      # C → FS-2 (kolom fraksinasi utama)
+    "vessel": 3,      # V → FS-3 (akumulator overhead/stabilizer)
+    "exchanger": 1,   # E → FS-1 (preheat train)
+    "pump": 2,        # P → FS-2 (pompa layanan utama)
+    "injection": 1,   # A → FS-1
+    "other": 0,       # tidak dikenal → OTHER
+}
+
+
+def fs_of(tag: str, unit_prefix: str = "11-") -> int:
+    """FS suatu tag: 1/2/3, 0 = OTHER, -1 = tidak ada di mapping.
+
+    Jika tag ada di FS_MAP (mapping CDU Balongan), nilai pasti dikembalikan.
+    Jika tidak, auto-assign berdasarkan jenis peralatan (tag_type) agar
+    analisis tetap berjalan untuk unit dengan prefix selain '11-'.
+    Pengembalian -1 tidak pernah terjadi lagi — semua tag mendapat FS.
+    """
     entry = FS_MAP.get(str(tag).strip())
-    return entry[0] if entry else -1
+    if entry:
+        return entry[0]
+    # Fallback: gunakan jenis peralatan dari huruf pertama tag.
+    typ = tag_type(tag, unit_prefix)
+    return _AUTO_FS_BY_TYPE.get(typ, 0)
 
 
 def mdt_of(tag: str, mdt_default: float = MDT_DEFAULT) -> float:
