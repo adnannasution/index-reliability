@@ -26,11 +26,11 @@ hasil reprodusibel (§10).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import numpy as np
 
-from app.core.fs_mapping import RBD_STAGES, fs_name, rbd_tags
+from app.core.fs_mapping import RBD_STAGES, Stage, fs_name, rbd_tags
 from app.core.rbd import EquipmentParams
 from app.core.reliability import pctl
 
@@ -79,16 +79,29 @@ class MonteCarloResult:
 def mc_system(
     eq: Mapping[str, EquipmentParams],
     *,
+    stages: Optional[Sequence[Stage]] = None,
     reps: int = 400,
     horizon: float = 8760.0,
     dt: float = 1.0,
     seed: int = 7,
     a_op_analytic: Mapping[str, float] | None = None,
 ) -> MonteCarloResult:
-    """Jalankan simulasi Monte Carlo sistem: port `mcSystem()` (baris 1595)."""
+    """Jalankan simulasi Monte Carlo sistem: port `mcSystem()` (baris 1595).
+
+    `stages` memungkinkan penggunaan stage dinamis (dari tag dataset aktual)
+    sebagai pengganti RBD_STAGES bawaan (mapping CDU Balongan 11-).
+    """
+    active = stages if stages is not None else RBD_STAGES
     n = int(round(horizon / dt))
     rng = np.random.default_rng(seed)
-    all_tags = rbd_tags()
+    # Kumpulkan tag dari stage yang aktif (bukan rbd_tags() yang hanya 11-).
+    all_tags: List[str] = []
+    seen: set = set()
+    for st in active:
+        for tg in st.tags:
+            if tg not in seen:
+                seen.add(tg)
+                all_tags.append(tg)
 
     a_fs = np.zeros((reps, 3), dtype=float)
     a_cdu = np.zeros(reps, dtype=float)
@@ -103,7 +116,7 @@ def mc_system(
                 ups[tg] = _sim_up(e, horizon, dt, n, rng)
 
         fs_up = np.ones((3, n), dtype=bool)
-        for st in RBD_STAGES:
+        for st in active:
             if not st.tags:
                 continue
             if st.typ == "ser":

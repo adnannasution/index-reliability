@@ -24,8 +24,11 @@ from app.core.fs_mapping import (
     BETA_WORKBOOK,
     FS_MAP,
     RBD_STAGES,
+    Stage,
+    build_dynamic_stages,
     fs_name,
     fs_of,
+    has_rbd_overlap,
     is_redundant_tag,
     is_single_point_of_failure,
     mdt_of,
@@ -101,6 +104,8 @@ class AnalysisResult:
     beta_crow_by_tag: Dict[str, float] = field(default_factory=dict)
     p_class_laplace: Dict[str, float] = field(default_factory=dict)
     t_obs: float = 0.0
+    #: stage RBD yang aktif: bawaan (11-) atau dinamis dari tag aktual
+    active_stages: Tuple[Stage, ...] = field(default_factory=tuple)
 
 
 def run_analysis(nd: NotificationData, cfg: Config) -> AnalysisResult:
@@ -409,21 +414,30 @@ def run_analysis(nd: NotificationData, cfg: Config) -> AnalysisResult:
         beta_by_tag=beta_by_tag,
         beta_by_class=(BETA_WORKBOOK if cfg.beta_source == "workbook" else w_class),
     )
-    # Tag jalur RBD yang tak pernah muncul di notifikasi (mis. P-112A/C/D):
-    # tambahkan dengan n_CM = 0 -> R = 1, A = 1 (perilaku eqR/eqA MATLAB).
-    for st in RBD_STAGES:
-        for tg in st.tags:
-            if tg not in eq:
-                eq[tg] = rbdmod.EquipmentParams(
-                    tag=tg, beta=1.0, eta=float("inf"), mtbf=float("inf"), n_cm=0,
-                    a_inh=1.0, a_op=1.0, mdt=mdt_of(tg), mttr=24.0,
-                    kelas=tag_type(tg, unit),
-                )
+
+    # Tentukan stage aktif: pakai RBD_STAGES bawaan (11-) bila ada overlap dengan
+    # tag dataset; bila tidak (mis. unit 1- atau unit lain), bangun stage dinamis
+    # dari tag aktual agar RBD/Monte Carlo menghasilkan kurva yang bermakna.
+    if has_rbd_overlap(tags):
+        active_stages: Tuple[Stage, ...] = RBD_STAGES
+        # Tag jalur RBD yang tak pernah muncul di notifikasi -> R=1, A=1.
+        for st in active_stages:
+            for tg in st.tags:
+                if tg not in eq:
+                    eq[tg] = rbdmod.EquipmentParams(
+                        tag=tg, beta=1.0, eta=float("inf"), mtbf=float("inf"), n_cm=0,
+                        a_inh=1.0, a_op=1.0, mdt=mdt_of(tg), mttr=24.0,
+                        kelas=tag_type(tg, unit),
+                    )
+    else:
+        active_stages = build_dynamic_stages(fs_tags)
+
     res.eq_params = eq
+    res.active_stages = active_stages
 
     # ---- E1. Tabel stage ----
     missions = np.array(cfg.missions, dtype=float)
-    for st in RBD_STAGES:
+    for st in active_stages:
         rv = stage_r_at(st, eq, missions)
         res.rbd_stages.append(
             {
@@ -439,9 +453,9 @@ def run_analysis(nd: NotificationData, cfg: Config) -> AnalysisResult:
     a_inh_fs, a_op_fs = {}, {}
     r_sys: Dict[int, np.ndarray] = {}
     for f in (1, 2, 3):
-        r_sys[f] = rbdmod.rbd_r(eq, f, missions)
-        a_inh_fs[f] = rbdmod.rbd_a(eq, f, "inh")
-        a_op_fs[f] = rbdmod.rbd_a(eq, f, "op")
+        r_sys[f] = rbdmod.rbd_r(eq, f, missions, active_stages)
+        a_inh_fs[f] = rbdmod.rbd_a(eq, f, "inh", active_stages)
+        a_op_fs[f] = rbdmod.rbd_a(eq, f, "op", active_stages)
         r_ser = rbdmod.full_series_r(fs_tags[f], eq, 720.0)
         res.rbd_system.append(
             {
@@ -473,7 +487,7 @@ def run_analysis(nd: NotificationData, cfg: Config) -> AnalysisResult:
     # ---- E3. Kurva & tabel keandalan per horizon ----
     hz_d = np.array(cfg.rel_horizons, dtype=float)
     hz_h = hz_d * 24.0
-    r_fs = {f: rbdmod.rbd_r(eq, f, hz_h) for f in (1, 2, 3)}
+    r_fs = {f: rbdmod.rbd_r(eq, f, hz_h, active_stages) for f in (1, 2, 3)}
     r_gab = r_fs[1] * r_fs[2] * r_fs[3]
     for j, d_ in enumerate(hz_d):
         res.reliability_horizons.append(
@@ -486,7 +500,7 @@ def run_analysis(nd: NotificationData, cfg: Config) -> AnalysisResult:
 
     # Kurva halus untuk grafik (linear & log): 400 titik sampai 1 tahun.
     tt = np.linspace(1.0, 8760.0, 400)
-    curve = {f"fs{f}": rbdmod.rbd_r(eq, f, tt) for f in (1, 2, 3)}
+    curve = {f"fs{f}": rbdmod.rbd_r(eq, f, tt, active_stages) for f in (1, 2, 3)}
     curve_cdu = curve["fs1"] * curve["fs2"] * curve["fs3"]
     res.reliability_curve = {
         "t_hari": (tt / 24.0).tolist(),
@@ -498,7 +512,7 @@ def run_analysis(nd: NotificationData, cfg: Config) -> AnalysisResult:
 
     # ---- E4. Umur keandalan ----
     tg_d = np.linspace(0.05, 730.0, 6000)
-    rc = {f: rbdmod.rbd_r(eq, f, tg_d * 24.0) for f in (1, 2, 3)}
+    rc = {f: rbdmod.rbd_r(eq, f, tg_d * 24.0, active_stages) for f in (1, 2, 3)}
     rc4 = rc[1] * rc[2] * rc[3]
     for label, arr in (("FS-1", rc[1]), ("FS-2", rc[2]), ("FS-3", rc[3]), ("Gabungan (CDU)", rc4)):
         row: Dict[str, Any] = {"sistem": label}
@@ -511,18 +525,18 @@ def run_analysis(nd: NotificationData, cfg: Config) -> AnalysisResult:
         tags=tags, n_cm=n_cm, kelas=kelas, mdt=mdt, t_obs=t_obs,
         beta_source="workbook", beta_by_tag={}, beta_by_class=BETA_WORKBOOK,
     )
-    for st in RBD_STAGES:
+    for st in active_stages:
         for tg in st.tags:
-            if tg not in eq_wb:
+            if tg not in eq_wb and tg in eq:
                 eq_wb[tg] = eq[tg]
     for f in (1, 2, 3):
         res.beta_comparison.append(
             {
                 "sistem": fs_name(f),
-                "r30_kelas": _f(float(rbdmod.rbd_r(eq_wb, f, 720.0))),
-                "r30_equip": _f(float(rbdmod.rbd_r(eq, f, 720.0))),
-                "aop_kelas": _f(rbdmod.rbd_a(eq_wb, f, "op")),
-                "aop_equip": _f(rbdmod.rbd_a(eq, f, "op")),
+                "r30_kelas": _f(float(rbdmod.rbd_r(eq_wb, f, 720.0, active_stages))),
+                "r30_equip": _f(float(rbdmod.rbd_r(eq, f, 720.0, active_stages))),
+                "aop_kelas": _f(rbdmod.rbd_a(eq_wb, f, "op", active_stages)),
+                "aop_equip": _f(rbdmod.rbd_a(eq, f, "op", active_stages)),
             }
         )
 

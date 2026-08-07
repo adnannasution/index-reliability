@@ -32,7 +32,9 @@ async def montecarlo(req: AnalyzeRequest) -> Dict[str, Any]:
         a_op = {r["sistem"]: r["a_op"] for r in res.availability}
         a_op["CDU total"] = a_op.get("CDU")
         mc = mc_system(
-            res.eq_params, reps=cfg.mc_reps, horizon=cfg.mc_horizon,
+            res.eq_params,
+            stages=res.active_stages if res.active_stages else None,
+            reps=cfg.mc_reps, horizon=cfg.mc_horizon,
             dt=cfg.mc_dt, seed=cfg.mc_seed, a_op_analytic=a_op,
         )
         out = {

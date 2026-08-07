@@ -21,6 +21,7 @@ from app.core import store
 from app.core.fs_mapping import (
     FS_FULL_NAME,
     RBD_STAGES,
+    Stage,
     fs_name,
     is_redundant_tag,
     is_single_point_of_failure,
@@ -34,9 +35,12 @@ router = APIRouter(prefix="/api/rbd", tags=["rbd"])
 _CURVE_DAYS = np.linspace(0.0, 365.0, 200)
 
 
-def _block(tag: str, res) -> Dict[str, Any]:
+def _block(tag: str, res, stages=None) -> Dict[str, Any]:
     """Metrik ringkas satu blok equipment untuk diagram & tooltip."""
     e = res.eq_params.get(tag)
+    active = stages if stages is not None else RBD_STAGES
+    redundan = any(s.typ == "par" and tag in s.tags for s in active)
+    spof = any(s.typ == "ser" and tag in s.tags for s in active)
     return {
         "tag": tag,
         "label": tag.replace(res.meta["unit_prefix"], ""),
@@ -52,8 +56,8 @@ def _block(tag: str, res) -> Dict[str, Any]:
         "mttr_jam": float(e.mttr) if e else None,
         "a_inh": float(e.a_inh) if e else None,
         "a_op": float(e.a_op) if e else None,
-        "redundan": is_redundant_tag(tag),
-        "spof": is_single_point_of_failure(tag),
+        "redundan": redundan,
+        "spof": spof,
         "pernah_gagal": bool(e and not e.never_failed),
         "r_30hari": float(rbdmod.eq_r(res.eq_params, tag, 720.0)),
     }
@@ -68,19 +72,20 @@ async def diagram(req: SelectionRequest) -> Dict[str, Any]:
     """
     cfg = resolve_config(req.config)
     res = await run_in_threadpool(get_analysis, req.dataset_id, cfg)
+    active = res.active_stages if res.active_stages else RBD_STAGES
 
     fs_nodes: List[Dict[str, Any]] = []
     for fs in (1, 2, 3):
-        stages: List[Dict[str, Any]] = []
-        for st in RBD_STAGES:
+        stage_rows: List[Dict[str, Any]] = []
+        for st in active:
             if st.fs != fs:
                 continue
-            blocks = [_block(t, res) for t in st.tags]
+            blocks = [_block(t, res, active) for t in st.tags]
             r30 = float(rbdmod.stage_r(st, res.eq_params, 720.0))
-            stages.append(
+            stage_rows.append(
                 {
                     "nama": st.name,
-                    "tipe": st.typ,                     # 'ser' | 'par'
+                    "tipe": st.typ,
                     "notasi": ("seri" if st.typ == "ser"
                                else f"paralel 1-dari-{len(st.tags)}" if st.tags else "seri"),
                     "n_tag": len(st.tags),
@@ -98,11 +103,11 @@ async def diagram(req: SelectionRequest) -> Dict[str, Any]:
                 "fs": fs,
                 "kode": fs_name(fs),
                 "nama": FS_FULL_NAME[fs],
-                "stages": stages,
-                "r_24j": float(rbdmod.rbd_r(res.eq_params, fs, 24.0)),
-                "r_30hari": float(rbdmod.rbd_r(res.eq_params, fs, 720.0)),
-                "a_inh": float(rbdmod.rbd_a(res.eq_params, fs, "inh")),
-                "a_op": float(rbdmod.rbd_a(res.eq_params, fs, "op")),
+                "stages": stage_rows,
+                "r_24j": float(rbdmod.rbd_r(res.eq_params, fs, 24.0, active)),
+                "r_30hari": float(rbdmod.rbd_r(res.eq_params, fs, 720.0, active)),
+                "a_inh": float(rbdmod.rbd_a(res.eq_params, fs, "inh", active)),
+                "a_op": float(rbdmod.rbd_a(res.eq_params, fs, "op", active)),
                 "n_cm": sum(
                     int(res.n_cm.get(t, 0)) for t in res.tags if res.fs_of_tag.get(t) == fs
                 ),
@@ -113,10 +118,10 @@ async def diagram(req: SelectionRequest) -> Dict[str, Any]:
         {
             "dataset_id": req.dataset_id,
             "cdu": {
-                "r_24j": float(rbdmod.cdu_r(res.eq_params, 24.0)),
-                "r_30hari": float(rbdmod.cdu_r(res.eq_params, 720.0)),
-                "a_inh": float(rbdmod.cdu_a(res.eq_params, "inh")),
-                "a_op": float(rbdmod.cdu_a(res.eq_params, "op")),
+                "r_24j": float(rbdmod.cdu_r(res.eq_params, 24.0, active)),
+                "r_30hari": float(rbdmod.cdu_r(res.eq_params, 720.0, active)),
+                "a_inh": float(rbdmod.cdu_a(res.eq_params, "inh", active)),
+                "a_op": float(rbdmod.cdu_a(res.eq_params, "op", active)),
                 "susunan": "FS-1 -> FS-2 -> FS-3 (seri)",
             },
             "fs": fs_nodes,
@@ -142,6 +147,7 @@ async def equipment_detail(req: SelectionRequest) -> Dict[str, Any]:
     """Detail satu equipment + kurva R(t)-nya (klik blok pada diagram)."""
     cfg = resolve_config(req.config)
     res = await run_in_threadpool(get_analysis, req.dataset_id, cfg)
+    active = res.active_stages if res.active_stages else RBD_STAGES
 
     tag = req.tags[0]
     if tag not in res.eq_params:
@@ -156,8 +162,8 @@ async def equipment_detail(req: SelectionRequest) -> Dict[str, Any]:
     days = np.linspace(0.0, float(req.horizon_days), 200)
     rv = rbdmod.eq_r(res.eq_params, tag, days * 24.0)
 
-    detail = _block(tag, res)
-    st = rbdmod.stage_of_tag(tag)
+    detail = _block(tag, res, active)
+    st = rbdmod.stage_of_tag(tag, active)
     detail["stage"] = st.name if st else None
     detail["stage_tipe"] = st.typ if st else None
     detail["stage_tags"] = list(st.tags) if st else []
@@ -183,6 +189,7 @@ async def selection(req: SelectionRequest) -> Dict[str, Any]:
     """
     cfg = resolve_config(req.config)
     res = await run_in_threadpool(get_analysis, req.dataset_id, cfg)
+    active = res.active_stages if res.active_stages else RBD_STAGES
 
     unknown = [t for t in req.tags if t not in res.eq_params]
     if unknown:
@@ -193,12 +200,12 @@ async def selection(req: SelectionRequest) -> Dict[str, Any]:
 
     days = np.linspace(0.0, float(req.horizon_days), 240)
     hours = days * 24.0
-    r_sel = rbdmod.selection_r(req.tags, res.eq_params, hours)
+    r_sel = rbdmod.selection_r(req.tags, res.eq_params, hours, active)
 
     # Rincian per stage agar pengguna melihat MENGAPA hasilnya demikian.
     groups: List[Dict[str, Any]] = []
     remaining = set(req.tags)
-    for st in RBD_STAGES:
+    for st in active:
         picked = [t for t in st.tags if t in remaining]
         if not picked:
             continue
@@ -227,12 +234,12 @@ async def selection(req: SelectionRequest) -> Dict[str, Any]:
 
     horizons = [1.0, 7.0, 30.0, 90.0, 180.0, 365.0]
     ringkas = [
-        {"hari": h, "r": float(rbdmod.selection_r(req.tags, res.eq_params, h * 24.0))}
+        {"hari": h, "r": float(rbdmod.selection_r(req.tags, res.eq_params, h * 24.0, active))}
         for h in horizons
     ]
 
-    a_op = rbdmod.selection_availability(req.tags, res.eq_params, "op")
-    a_inh = rbdmod.selection_availability(req.tags, res.eq_params, "inh")
+    a_op = rbdmod.selection_availability(req.tags, res.eq_params, "op", active)
+    a_inh = rbdmod.selection_availability(req.tags, res.eq_params, "inh", active)
     n_cm_total = sum(int(res.n_cm.get(t, 0)) for t in req.tags)
 
     return store.json_safe(
@@ -245,7 +252,7 @@ async def selection(req: SelectionRequest) -> Dict[str, Any]:
             "a_op": a_op,
             "n_cm_total": n_cm_total,
             "kelompok": groups,
-            "tabel": [_block(t, res) for t in req.tags],
+            "tabel": [_block(t, res, active) for t in req.tags],
             "catatan": (
                 "Penggabungan mengikuti tipe stage RBD masing-masing tag: tag pada "
                 "stage paralel yang sama dihitung redundan, sisanya seri."
