@@ -219,11 +219,12 @@ export function DataPage() {
                   : 'notifikasi unit terakhir'}
                 .
               </Callout>
-              {analysis.meta.n_unmapped > 0 && (
-                <Callout tone="warning" title={`${analysis.meta.n_unmapped} tag tanpa mapping FS`}>
-                  Tag berikut tidak ada pada mapping Functional System sehingga diperlakukan sebagai OTHER:{' '}
+              {analysis.meta.n_auto_mapped > 0 && (
+                <Callout tone="info" title={`${analysis.meta.n_auto_mapped} tag di-assign FS otomatis`}>
+                  Tag berikut tidak ada di mapping CDU Balongan, sehingga Functional System-nya
+                  diperkirakan dari jenis peralatan (F→FS-2, C→FS-2, V→FS-3, E→FS-1, P→FS-2):{' '}
                   {analysis.meta.unmapped_tags.slice(0, 10).join(', ')}
-                  {analysis.meta.unmapped_tags.length > 10 ? ', …' : ''}. Analisis tetap berjalan.
+                  {analysis.meta.unmapped_tags.length > 10 ? `, +${analysis.meta.unmapped_tags.length - 10} lainnya` : ''}. Analisis tetap berjalan.
                 </Callout>
               )}
             </div>
