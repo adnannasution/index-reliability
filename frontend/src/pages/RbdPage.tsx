@@ -60,7 +60,7 @@ export function RbdPage() {
   const loading = useStore((s) => s.diagramLoading)
   const loadDiagram = useStore((s) => s.loadDiagram)
   const selected = useStore((s) => s.selected)
-  const [mode, setMode] = useState<RbdMode>('cdu')
+  const [mode, setMode] = useState<RbdMode>('fs1')
   const [logScale, setLogScale] = useState(false)
   const [tab, setTab] = useState<'detail' | 'seleksi'>('detail')
 
