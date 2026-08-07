@@ -176,34 +176,56 @@ def stage_a(stage: Stage, eq: Mapping[str, EquipmentParams], which: str = "inh")
     return 1.0 - p
 
 
-def rbd_r(eq: Mapping[str, EquipmentParams], fs: int, t: np.ndarray | float) -> np.ndarray:
-    """R(t) satu Functional System = perkalian seluruh stage-nya: port `rbdR()`."""
+def rbd_r(
+    eq: Mapping[str, EquipmentParams],
+    fs: int,
+    t: np.ndarray | float,
+    stages: Optional[Sequence[Stage]] = None,
+) -> np.ndarray:
+    """R(t) satu Functional System = perkalian seluruh stage-nya: port `rbdR()`.
+
+    `stages` boleh berisi stage dinamis (dari tag yang benar-benar ada di data);
+    bila None, pakai RBD_STAGES bawaan (mapping CDU Balongan 11-).
+    """
     arr = np.asarray(t, dtype=float)
     r = np.ones_like(arr)
-    for s in RBD_STAGES:
+    for s in (stages if stages is not None else RBD_STAGES):
         if s.fs == fs:
             r = r * stage_r(s, eq, arr)
     return r
 
 
-def rbd_a(eq: Mapping[str, EquipmentParams], fs: int, which: str = "inh") -> float:
+def rbd_a(
+    eq: Mapping[str, EquipmentParams],
+    fs: int,
+    which: str = "inh",
+    stages: Optional[Sequence[Stage]] = None,
+) -> float:
     """Ketersediaan satu Functional System: port `rbdA()`."""
     a = 1.0
-    for s in RBD_STAGES:
+    for s in (stages if stages is not None else RBD_STAGES):
         if s.fs == fs:
             a *= stage_a(s, eq, which)
     return a
 
 
-def cdu_r(eq: Mapping[str, EquipmentParams], t: np.ndarray | float) -> np.ndarray:
+def cdu_r(
+    eq: Mapping[str, EquipmentParams],
+    t: np.ndarray | float,
+    stages: Optional[Sequence[Stage]] = None,
+) -> np.ndarray:
     """R(t) gabungan CDU = R_FS1 * R_FS2 * R_FS3 (tiga FS tersusun SERI)."""
     arr = np.asarray(t, dtype=float)
-    return rbd_r(eq, 1, arr) * rbd_r(eq, 2, arr) * rbd_r(eq, 3, arr)
+    return rbd_r(eq, 1, arr, stages) * rbd_r(eq, 2, arr, stages) * rbd_r(eq, 3, arr, stages)
 
 
-def cdu_a(eq: Mapping[str, EquipmentParams], which: str = "inh") -> float:
+def cdu_a(
+    eq: Mapping[str, EquipmentParams],
+    which: str = "inh",
+    stages: Optional[Sequence[Stage]] = None,
+) -> float:
     """Ketersediaan gabungan CDU = hasil kali ketersediaan ketiga FS."""
-    return rbd_a(eq, 1, which) * rbd_a(eq, 2, which) * rbd_a(eq, 3, which)
+    return rbd_a(eq, 1, which, stages) * rbd_a(eq, 2, which, stages) * rbd_a(eq, 3, which, stages)
 
 
 def full_series_r(
@@ -224,21 +246,12 @@ def full_series_r(
 # Seleksi dinamis (fitur §6): gabungan keandalan equipment pilihan pengguna
 # --------------------------------------------------------------------------
 def selection_r(
-    selected: Sequence[str], eq: Mapping[str, EquipmentParams], t: np.ndarray | float
+    selected: Sequence[str],
+    eq: Mapping[str, EquipmentParams],
+    t: np.ndarray | float,
+    stages: Optional[Sequence[Stage]] = None,
 ) -> np.ndarray:
-    """R(t) gabungan dari sekumpulan tag yang dipilih pengguna pada diagram RBD.
-
-    Logika mengikuti struktur RBD yang sebenarnya, bukan asumsi seragam:
-      * tag yang dipilih dikelompokkan menurut stage asalnya;
-      * di dalam satu stage, gabungan memakai tipe stage itu (seri / paralel);
-      * antar-stage selalu SERI (stage tersusun seri pada jalur proses);
-      * tag terpilih yang berada di LUAR jalur RBD diperlakukan sebagai satu
-        blok seri tambahan (tidak ada informasi redundansi untuknya).
-
-    Dengan demikian memilih dua pompa A/B pada stage paralel menghasilkan
-    redundansi (1-(1-Ra)(1-Rb)), sedangkan memilih F-101 dan C-101 yang berada
-    di stage seri berbeda menghasilkan perkalian Ra*Rb.
-    """
+    """R(t) gabungan dari sekumpulan tag yang dipilih pengguna pada diagram RBD."""
     arr = np.asarray(t, dtype=float)
     chosen = [s for s in selected if s]
     if not chosen:
@@ -247,7 +260,7 @@ def selection_r(
     remaining = set(chosen)
     r = np.ones_like(arr)
 
-    for st in RBD_STAGES:
+    for st in (stages if stages is not None else RBD_STAGES):
         picked = [tg for tg in st.tags if tg in remaining]
         if not picked:
             continue
@@ -261,14 +274,16 @@ def selection_r(
                 p = p * (1.0 - eq_r(eq, tg, arr))
             r = r * (1.0 - p)
 
-    # Tag di luar jalur RBD -> seri.
     for tg in sorted(remaining):
         r = r * eq_r(eq, tg, arr)
     return r
 
 
 def selection_availability(
-    selected: Sequence[str], eq: Mapping[str, EquipmentParams], which: str = "op"
+    selected: Sequence[str],
+    eq: Mapping[str, EquipmentParams],
+    which: str = "op",
+    stages: Optional[Sequence[Stage]] = None,
 ) -> float:
     """Ketersediaan gabungan seleksi, memakai logika stage yang sama."""
     chosen = [s for s in selected if s]
@@ -276,7 +291,7 @@ def selection_availability(
         return 1.0
     remaining = set(chosen)
     a = 1.0
-    for st in RBD_STAGES:
+    for st in (stages if stages is not None else RBD_STAGES):
         picked = [tg for tg in st.tags if tg in remaining]
         if not picked:
             continue
@@ -294,9 +309,9 @@ def selection_availability(
     return a
 
 
-def stage_of_tag(tag: str) -> Optional[Stage]:
+def stage_of_tag(tag: str, stages: Optional[Sequence[Stage]] = None) -> Optional[Stage]:
     """Stage RBD tempat sebuah tag berada (None bila di luar jalur)."""
-    for st in RBD_STAGES:
+    for st in (stages if stages is not None else RBD_STAGES):
         if tag in st.tags:
             return st
     return None

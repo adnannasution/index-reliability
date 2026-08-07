@@ -18,8 +18,9 @@ Sumber MATLAB:
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Tuple
+from typing import Dict, List, Literal, Set, Tuple
 
 from app.config.defaults import MDT_DEFAULT
 
@@ -275,3 +276,47 @@ def is_single_point_of_failure(tag: str) -> bool:
     catatan pada RBD laporan (mis. F-101, C-101).
     """
     return any(s.typ == "ser" and tag in s.tags for s in RBD_STAGES)
+
+
+# Set tag bawaan (prefix 11-) agar modul lain bisa cek overlap dengan cepat.
+_RBD_TAG_SET: Set[str] = {t for s in RBD_STAGES for t in s.tags}
+
+
+def has_rbd_overlap(tags: List[str]) -> bool:
+    """True bila setidaknya satu tag dari daftar ada di jalur RBD bawaan (11-)."""
+    return any(t in _RBD_TAG_SET for t in tags)
+
+
+def build_dynamic_stages(tags_by_fs: Dict[int, List[str]]) -> Tuple[Stage, ...]:
+    """Bangun stage RBD secara dinamis dari tag yang benar-benar ada di dataset.
+
+    Dipakai bila prefix unit data tidak cocok dengan RBD_STAGES bawaan (11-).
+    Pengelompokan:
+      * Tag yang berakhiran huruf (A-Z) dan karakter sebelumnya angka diasumsikan
+        sebagai anggota grup redundan; tag dengan base yang sama dalam satu FS
+        dijadikan stage paralel.
+      * Tag tunggal (atau tanpa pola suffix) menjadi stage seri.
+
+    Ini menghasilkan diagram RBD perkiraan yang fungsional untuk data unit
+    manapun, alih-alih mengandalkan mapping CDU Balongan yang hardcoded.
+    """
+    stages: List[Stage] = []
+    for fs in (1, 2, 3):
+        tgs = sorted(tags_by_fs.get(fs, []))
+        if not tgs:
+            continue
+        groups: Dict[str, List[str]] = defaultdict(list)
+        for t in tgs:
+            # Deteksi suffix huruf: "1-P-101A" -> base "1-P-101", suffix "A"
+            if t and t[-1].isalpha() and len(t) > 1 and t[-2].isdigit():
+                base = t[:-1]
+            else:
+                base = t
+            groups[base].append(t)
+        for base, members in sorted(groups.items()):
+            if len(members) == 1:
+                stages.append(Stage(fs, members[0], "ser", tuple(members)))
+            else:
+                letters = "/".join(m[-1] for m in members)
+                stages.append(Stage(fs, f"{base} ({letters})", "par", tuple(members)))
+    return tuple(stages)
